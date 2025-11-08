@@ -1,0 +1,78 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg
+*.egg-info/
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+ENV/
+.venv/
+build/
+develop-eggs/
+dist/
+downloads/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.manifest
+*.spec
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+*.ipynb_checkpoints
+
+# Logs and debug files
+*.log
+*.pot
+*.mo
+*.pot~
+*.tmp
+*.temp
+*.bak
+*.swp
+
+# IDE and Editor configs
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Checkpoints / Outputs
+checkpoints/
+outputs/
+runs/
+lightning_logs/
+wandb/
+tensorboard/
+logs/
+
+# Data files
+data/
+datasets/
+*.csv
+*.tsv
+*.npy
+*.npz
+*.h5
+*.pkl
+*.pth
+*.pt
+
+# Model files
+*.onnx
+*.pb
+*.ckpt
+
+# Environment files
+.env
