@@ -76,3 +76,4 @@ datasets/
 
 # Environment files
 .env
+scibert/pytorch_model.bin
