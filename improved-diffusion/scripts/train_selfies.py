@@ -1,0 +1,210 @@
+"""
+Train a diffusion model on SELFIES molecular representations.
+Modified from original SMILES-based training script.
+"""
+
+import argparse
+import json, torch, os
+from improved_diffusion import gaussian_diffusion as gd
+from improved_diffusion.respace import SpacedDiffusion, space_timesteps
+import numpy as np
+from improved_diffusion import dist_util, logger
+from improved_diffusion.transformer_model2 import TransformerNetModel2
+from improved_diffusion.resample import create_named_schedule_sampler
+from improved_diffusion.script_util import (
+    model_and_diffusion_defaults,
+    add_dict_to_argparser,
+)
+from improved_diffusion.train_util import TrainLoop
+from transformers import set_seed
+import torch.distributed as dist
+import wandb
+from mytokenizers_selfies import SELFIESTokenizer
+from mydatasets_selfies import get_dataloader, ChEBIdataset
+import warnings
+import torch.multiprocessing as mp
+
+warnings.filterwarnings("ignore")
+
+
+def main_worker(rank, world_size):
+    args = create_argparser().parse_args()
+    set_seed(args.seed)
+
+    if rank == 0:
+        wandb.init(
+            project="DiffusionLM-SELFIES",
+            config=args.__dict__,
+        )
+        print(wandb.config)
+
+    dist_util.setup_dist(rank, world_size) 
+    print("Creating model and diffusion...")
+    
+    # Initialize SELFIES tokenizer
+    selfies_tokenizer = SELFIESTokenizer(
+        vocab_path='../../datasets/SELFIES/selfies_vocab.txt',
+        max_len=args.max_seq_len
+    )
+    
+    if rank == 0:
+        print(f'SELFIES Vocabulary size: {len(selfies_tokenizer)}')
+        print(f'Maximum sequence length: {args.max_seq_len}')
+    
+    # Initialize model
+    model = TransformerNetModel2(
+        in_channels=args.model_in_channels,
+        model_channels=args.model_model_channels,
+        dropout=args.model_dropout,
+        use_checkpoint=False,
+        config_name='bert-base-uncased',
+        training_mode='e2e',
+        vocab_size=len(selfies_tokenizer),
+        experiment_mode='lm',
+        logits_mode=1,
+        hidden_size=args.model_hidden_size,
+        num_attention_heads=args.model_num_attention_heads,
+        num_hidden_layers=args.model_num_hidden_layers,
+    )
+
+    if rank == 0:
+        pytorch_total_params = sum(p.numel() for p in model.parameters())
+        print(f'Model total parameter count: {pytorch_total_params:,}')
+
+    # Initialize diffusion
+    diffusion = SpacedDiffusion(
+        use_timesteps=[i for i in range(2000)],
+        betas=gd.get_named_beta_schedule('sqrt', 2000),
+        model_mean_type=gd.ModelMeanType.START_X,
+        model_var_type=gd.ModelVarType.FIXED_LARGE,
+        loss_type=gd.LossType.E2E_MSE,
+        rescale_timesteps=True,
+        model_arch='transformer',
+        training_mode='e2e',
+    )
+
+    schedule_sampler = create_named_schedule_sampler('uniform', diffusion)
+    
+    if rank == 0:
+        print('='*60)
+        print('Loading SELFIES dataset...')
+        print('='*60)
+    
+    # Load dataset
+    train_dataset = ChEBIdataset(
+        dir='../../datasets/SELFIES/',
+        selfies_tokenizer=selfies_tokenizer,
+        split='train_val_256',
+        replace_desc=False,
+        corrupt_prob=0.0,
+        mask_desc=False
+    )
+    
+    if rank == 0:
+        print(f'Training samples: {len(train_dataset):,}')
+    
+    dataloader = get_dataloader(train_dataset, args.batch_size, rank, world_size)
+    
+    # Start training
+    TrainLoop(
+        model=model,
+        diffusion=diffusion,
+        data=dataloader,
+        batch_size=args.batch_size,
+        microbatch=args.microbatch,
+        lr=args.lr,
+        ema_rate=args.ema_rate,
+        log_interval=args.log_interval,
+        save_interval=args.save_interval,
+        resume_checkpoint=args.resume_checkpoint,
+        use_fp16=args.use_fp16,
+        fp16_scale_growth=args.fp16_scale_growth,
+        schedule_sampler=schedule_sampler,
+        weight_decay=args.weight_decay,
+        lr_anneal_steps=args.lr_anneal_steps,
+        checkpoint_path=args.checkpoint_path,
+        gradient_clipping=args.gradient_clipping,
+        eval_data=None,
+        eval_interval=args.eval_interval
+    ).run_loop()
+    
+    dist.destroy_process_group()
+
+
+def create_argparser():
+    defaults = dict()
+    text_defaults = dict(
+        attention_resolutions='16,8', 
+        batch_size=64, 
+        cache_mode='no', 
+        checkpoint_path='../../checkpoints_selfies', 
+        class_cond=False, 
+        config_name='bert-base-uncased', 
+        data_dir='', 
+        dataset_config_name='wikitext-2-raw-v1', 
+        dataset_name='wikitext', 
+        diffusion_steps=2000, 
+        dropout=0.1, 
+        ema_rate='0.9999', 
+        emb_scale_factor=1.0, 
+        eval_interval=2000, 
+        experiment='random', 
+        experiment_mode='lm', 
+        fp16_scale_growth=0.001, 
+        gradient_clipping=2.4, 
+        image_size=8, 
+        in_channel=16, 
+        learn_sigma=False, 
+        log_interval=20, 
+        logits_mode=1, 
+        lr=0.00005,
+        lr_anneal_steps=200000, 
+        microbatch=-1, 
+        modality='e2e-tgt', 
+        model_arch='transformer', 
+        noise_level=0.0, 
+        noise_schedule='sqrt', 
+        num_channels=128, 
+        num_heads=4, 
+        num_heads_upsample=-1, 
+        num_res_blocks=2, 
+        out_channel=16, 
+        padding_mode='pad', 
+        predict_xstart=True, 
+        preprocessing_num_workers=1, 
+        rescale_learned_sigmas=True, 
+        rescale_timesteps=True, 
+        resume_checkpoint='', 
+        save_interval=10000, 
+        schedule_sampler='uniform', 
+        seed=19991009, 
+        sigma_small=False, 
+        timestep_respacing='', 
+        training_mode='e2e', 
+        use_bert_tokenizer='no', 
+        use_checkpoint=False, 
+        use_fp16=False, 
+        use_kl=False, 
+        use_scale_shift_norm=True, 
+        weight_decay=0.0,
+        model_in_channels=32,
+        model_model_channels=128,
+        model_dropout=0.1,
+        model_hidden_size=1024,
+        model_num_attention_heads=16,
+        model_num_hidden_layers=12,
+        max_seq_len=384,  # Increased for SELFIES
+    )
+    defaults.update(model_and_diffusion_defaults())
+    defaults.update(text_defaults)
+    parser = argparse.ArgumentParser()
+    add_dict_to_argparser(parser, defaults)
+    return parser
+
+
+if __name__ == "__main__":
+    import os
+    os.environ['CUDA_DEVICES_ORDER'] = 'PCI_BUS_ID'
+    os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+    world_size = 1
+    mp.spawn(main_worker, args=(world_size,), nprocs=world_size, join=True)

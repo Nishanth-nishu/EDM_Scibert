@@ -1,0 +1,5 @@
+Validity: 100.00%
+Uniqueness: 100.00%
+Ro5 Compliance: 73.00%
+Avg MW: 309.39
+Avg LogP: 2.20
