@@ -188,7 +188,7 @@ python post_sample_selfies.py \
 ## Acknowledgements
 
 This project is based on the **Text-Guided Mask Denoising Language Model (TGM-DLM)** available at [https://github.com/Deno-V/tgm-dlm.git](https://github.com/Deno-V/tgm-dlm.git).
-It has been extended to **SELFIES-based generation**, ensuring 100% valid molecules and robust text-conditioned diffusion modeling.
+It has been extended to **SELFIES-based generation**, ensuring 98%+ valid molecules and robust text-conditioned diffusion modeling.
 
 ---
 
