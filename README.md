@@ -7,7 +7,7 @@ It has been **significantly modified** to operate using the **SELFIES (SELF-refe
 
 ## Key Advantages
 
-* **100% syntactic validity** of generated molecules (SELFIES guarantees valid molecular strings)
+* **98% syntactic validity** of generated molecules (SELFIES guarantees valid molecular strings)
 * **SciBERT-based text guidance** for molecule-property alignment
 * **Automated SELFIES data preprocessing pipeline**
 * **Comprehensive evaluation metrics** for quality and diversity
